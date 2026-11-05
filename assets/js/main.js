@@ -633,6 +633,76 @@
     start();
   });
 
+  /* ---------- Related posts slider (3 / 2 / 1 per view, endless loop, swipe + arrows + dots + autoplay) ---------- */
+  [].slice.call(document.querySelectorAll('[data-posts-slider]')).forEach(function (box) {
+    var vp = box.querySelector('.post-slider__viewport'), track = box.querySelector('.post-slider__track');
+    var prev = box.querySelector('.post-slider__btn--prev'), nextBtn = box.querySelector('.post-slider__btn--next');
+    var dotsBox = box.querySelector('.post-slider__dots');
+    var orig = [].slice.call(track.children), n = orig.length;
+    var idx = 0, timer = null, hover = false, busy = false, sx = null;
+    var perView = function () { var w = window.innerWidth; return w <= 640 ? 1 : w <= 1023 ? 2 : 3; };
+    var step = function () { return track.children.length > 1 ? track.children[1].offsetLeft - track.children[0].offsetLeft : vp.clientWidth; };
+    var move = function (animate) {
+      track.style.transition = animate && !reduce ? '' : 'none';
+      track.style.transform = 'translateX(' + (-idx * step()) + 'px)';
+    };
+    var sync = function () {
+      [].slice.call(dotsBox.children).forEach(function (b, i) { b.setAttribute('aria-current', i === idx % n ? 'true' : 'false'); });
+    };
+    var build = function () {
+      [].slice.call(track.querySelectorAll('[data-clone]')).forEach(function (c) { track.removeChild(c); });
+      var looping = n > perView();
+      box.classList.toggle('is-ready', looping);
+      dotsBox.innerHTML = '';
+      idx = 0; move(false); sync();
+      if (!looping) return false;
+      for (var i = 0; i < perView(); i++) {
+        var c = orig[i].cloneNode(true);
+        c.setAttribute('data-clone', ''); c.setAttribute('aria-hidden', 'true');
+        [].slice.call(c.querySelectorAll('a')).forEach(function (a) { a.tabIndex = -1; });
+        track.appendChild(c);
+      }
+      for (var d = 0; d < n; d++) {
+        (function (d) {
+          var b = document.createElement('button');
+          b.type = 'button'; b.setAttribute('aria-label', 'Go to slide ' + (d + 1));
+          b.addEventListener('click', function () { idx = d; move(true); sync(); restart(); });
+          dotsBox.appendChild(b);
+        })(d);
+      }
+      sync();
+      return true;
+    };
+    /* after the slide that lands on a clone finishes, silently jump back to the real card */
+    var settle = function () {
+      if (idx >= n) { idx = 0; move(false); sync(); }
+      busy = false;
+    };
+    var next = function () {
+      if (busy) return; busy = true;
+      idx++; move(true); sync();
+      if (reduce) settle(); else setTimeout(settle, 650);
+    };
+    var back = function () {
+      if (busy) return; busy = true;
+      if (idx <= 0) { idx = n; move(false); void track.offsetWidth; }
+      idx--; move(true); sync();
+      setTimeout(function () { busy = false; }, reduce ? 0 : 650);
+    };
+    var restart = function () { clearInterval(timer); if (!reduce && n > perView()) timer = setInterval(function () { if (!document.hidden && !hover) next(); }, 3500); };
+    prev.addEventListener('click', function () { back(); restart(); });
+    nextBtn.addEventListener('click', function () { next(); restart(); });
+    ['mouseenter', 'focusin'].forEach(function (e) { box.addEventListener(e, function () { hover = true; }); });
+    ['mouseleave', 'focusout'].forEach(function (e) { box.addEventListener(e, function () { hover = false; }); });
+    vp.addEventListener('touchstart', function (e) { sx = e.touches[0].clientX; hover = true; }, { passive: true });
+    vp.addEventListener('touchend', function (e) {
+      if (sx !== null) { var dx = e.changedTouches[0].clientX - sx; if (Math.abs(dx) > 40) { dx < 0 ? next() : back(); restart(); } }
+      sx = null; hover = false;
+    }, { passive: true });
+    var rt; window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(function () { build(); restart(); }, 200); });
+    build(); restart();
+  });
+
   /* ---------- Footer year ---------- */
   var y = document.getElementById('yr'); if (y) y.textContent = new Date().getFullYear();
 })();
